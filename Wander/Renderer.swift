@@ -123,6 +123,190 @@ final class FrameClock {
     }
 }
 
+struct SceneNodeID: Hashable, Sendable {
+    let rawValue: UInt64
+}
+
+struct Transform: Sendable {
+    var position: SIMD3<Float>
+    var rotation: simd_quatf
+    var scale: SIMD3<Float>
+
+    static let identity = Transform(
+        position: SIMD3<Float>(0, 0, 0),
+        rotation: simd_quaternion(0, SIMD3<Float>(0, 1, 0)),
+        scale: SIMD3<Float>(1, 1, 1)
+    )
+
+    func localMatrix() -> matrix_float4x4 {
+        matrix4x4_translation(position.x, position.y, position.z) * matrix_float4x4(rotation) * matrix4x4_scale(scale.x, scale.y, scale.z)
+    }
+}
+
+private struct SceneNodeRecord {
+    let id: SceneNodeID
+    var parent: SceneNodeID?
+    var children: [SceneNodeID]
+    var localTransform: Transform
+    var worldMatrix: matrix_float4x4
+    var isDirty: Bool
+}
+
+final class SceneGraph {
+    private var nodes: [SceneNodeID: SceneNodeRecord] = [:]
+    private var rootOrder: [SceneNodeID] = []
+    private var nextRawID: UInt64 = 1
+    private(set) var lastTraversalOrder: [SceneNodeID] = []
+
+    @discardableResult
+    func createNode(parent: SceneNodeID? = nil, localTransform: Transform = .identity) -> SceneNodeID {
+        let id = SceneNodeID(rawValue: nextRawID)
+        nextRawID += 1
+
+        nodes[id] = SceneNodeRecord(
+            id: id,
+            parent: nil,
+            children: [],
+            localTransform: localTransform,
+            worldMatrix: localTransform.localMatrix(),
+            isDirty: true
+        )
+
+        if let parent {
+            if !setParent(id, parent: parent) {
+                rootOrder.append(id)
+            }
+        } else {
+            rootOrder.append(id)
+        }
+
+        return id
+    }
+
+    func contains(_ id: SceneNodeID) -> Bool {
+        nodes[id] != nil
+    }
+
+    func setLocalTransform(_ transform: Transform, for nodeID: SceneNodeID) {
+        guard var node = nodes[nodeID] else { return }
+        node.localTransform = transform
+        nodes[nodeID] = node
+        markSubtreeDirty(startingAt: nodeID)
+    }
+
+    func localTransform(for nodeID: SceneNodeID) -> Transform? {
+        nodes[nodeID]?.localTransform
+    }
+
+    func worldMatrix(for nodeID: SceneNodeID) -> matrix_float4x4? {
+        nodes[nodeID]?.worldMatrix
+    }
+
+    @discardableResult
+    func setParent(_ childID: SceneNodeID, parent newParentID: SceneNodeID?) -> Bool {
+        guard var child = nodes[childID] else { return false }
+
+        if let newParentID {
+            guard nodes[newParentID] != nil else { return false }
+            if newParentID == childID { return false }
+            if isDescendant(ancestor: childID, potentialDescendant: newParentID) { return false }
+        }
+
+        if let previousParentID = child.parent {
+            guard var previousParent = nodes[previousParentID] else { return false }
+            previousParent.children.removeAll { $0 == childID }
+            nodes[previousParentID] = previousParent
+        } else {
+            rootOrder.removeAll { $0 == childID }
+        }
+
+        child.parent = newParentID
+        nodes[childID] = child
+
+        if let newParentID {
+            guard var newParent = nodes[newParentID] else { return false }
+            newParent.children.append(childID)
+            nodes[newParentID] = newParent
+        } else if !rootOrder.contains(childID) {
+            rootOrder.append(childID)
+        }
+
+        markSubtreeDirty(startingAt: childID)
+        return true
+    }
+
+    @discardableResult
+    func removeNode(_ nodeID: SceneNodeID) -> Bool {
+        guard let node = nodes[nodeID] else { return false }
+
+        for childID in node.children {
+            _ = removeNode(childID)
+        }
+
+        if let parentID = node.parent, var parent = nodes[parentID] {
+            parent.children.removeAll { $0 == nodeID }
+            nodes[parentID] = parent
+        } else {
+            rootOrder.removeAll { $0 == nodeID }
+        }
+
+        nodes.removeValue(forKey: nodeID)
+        return true
+    }
+
+    func updateWorldTransforms() {
+        var traversal: [SceneNodeID] = []
+        for rootID in rootOrder where nodes[rootID] != nil {
+            updateNodeWorld(
+                nodeID: rootID,
+                parentWorldMatrix: matrix_identity_float4x4,
+                parentDirty: false,
+                traversal: &traversal
+            )
+        }
+        lastTraversalOrder = traversal
+    }
+
+    private func updateNodeWorld(nodeID: SceneNodeID,
+                                 parentWorldMatrix: matrix_float4x4,
+                                 parentDirty: Bool,
+                                 traversal: inout [SceneNodeID]) {
+        guard var node = nodes[nodeID] else { return }
+        traversal.append(nodeID)
+
+        let shouldRecompute = parentDirty || node.isDirty
+        if shouldRecompute {
+            node.worldMatrix = parentWorldMatrix * node.localTransform.localMatrix()
+            node.isDirty = false
+            nodes[nodeID] = node
+        }
+
+        for childID in node.children {
+            updateNodeWorld(
+                nodeID: childID,
+                parentWorldMatrix: node.worldMatrix,
+                parentDirty: shouldRecompute,
+                traversal: &traversal
+            )
+        }
+    }
+
+    private func markSubtreeDirty(startingAt nodeID: SceneNodeID) {
+        guard var node = nodes[nodeID] else { return }
+        node.isDirty = true
+        nodes[nodeID] = node
+        for childID in node.children {
+            markSubtreeDirty(startingAt: childID)
+        }
+    }
+
+    private func isDescendant(ancestor: SceneNodeID, potentialDescendant: SceneNodeID) -> Bool {
+        guard let node = nodes[ancestor] else { return false }
+        if node.children.contains(potentialDescendant) { return true }
+        return node.children.contains { isDescendant(ancestor: $0, potentialDescendant: potentialDescendant) }
+    }
+}
+
 // The 256 byte aligned size of our uniform structure
 let alignedUniformsSize = (MemoryLayout<Uniforms>.size + 0xFF) & -0x100
 
@@ -485,6 +669,13 @@ func matrix4x4_translation(_ translationX: Float, _ translationY: Float, _ trans
                                           vector_float4(0, 1, 0, 0),
                                           vector_float4(0, 0, 1, 0),
                                           vector_float4(translationX, translationY, translationZ, 1)))
+}
+
+func matrix4x4_scale(_ scaleX: Float, _ scaleY: Float, _ scaleZ: Float) -> matrix_float4x4 {
+    return matrix_float4x4.init(columns: (vector_float4(scaleX, 0, 0, 0),
+                                          vector_float4(0, scaleY, 0, 0),
+                                          vector_float4(0, 0, scaleZ, 0),
+                                          vector_float4(0, 0, 0, 1)))
 }
 
 func matrix_perspective_right_hand(fovyRadians fovy: Float, aspectRatio: Float, nearZ: Float, farZ: Float) -> matrix_float4x4 {
