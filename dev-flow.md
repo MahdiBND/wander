@@ -5,7 +5,7 @@
   - Wire bootstrap systems into renderer startup and frame update.
   - Add baseline tests for target constraints and frame delta clamping.
 
-- [ ] **Step 2: Scene Graph Core (nodes + transforms + depth-first world matrix update)**
+- [x] **Step 2: Scene Graph Core (nodes + transforms + depth-first world matrix update)**
   - Implement node hierarchy ownership (`SceneNodeID`, parent/children links).
   - Implement local `Transform` + cached world matrix updates via depth-first traversal.
   - Add dirty propagation so unchanged branches skip recomputation.
