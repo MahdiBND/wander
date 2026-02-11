@@ -13,6 +13,7 @@ class GameViewController: NSViewController {
 
     var renderer: Renderer!
     var mtkView: MTKView!
+    let targets = EngineTargets.zenDrivingM1
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -35,13 +36,15 @@ class GameViewController: NSViewController {
         }
 
         mtkView.device = defaultDevice
+        mtkView.preferredFramesPerSecond = targets.targetFPS
 
-        guard let newRenderer = Renderer(metalKitView: mtkView) else {
+        guard let newRenderer = Renderer(metalKitView: mtkView, targets: targets) else {
             print("Renderer cannot be initialized")
             return
         }
 
         renderer = newRenderer
+        print("Wander bootstrapped with target FPS \(targets.targetFPS), memory budget \(targets.memoryBudgetMB)MB")
 
         renderer.mtkView(mtkView, drawableSizeWillChange: mtkView.drawableSize)
 
