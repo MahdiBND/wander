@@ -3,6 +3,7 @@
 ## Project Structure & Module Organization
 This repository is an Xcode macOS game project using Swift + Metal.
 
+- `readme.md`: Describes project's folder structure that should be followed.
 - `Wander/`: App source files and runtime assets.
 - `Wander/AppDelegate.swift`: App lifecycle entry point.
 - `Wander/GameViewController.swift`: View/controller glue for rendering.
@@ -26,7 +27,7 @@ Use Xcode Product actions for day-to-day iteration; use `xcodebuild` in CI or re
 - Use 4 spaces for indentation; avoid tabs.
 - Use `UpperCamelCase` for types (`Renderer`), `lowerCamelCase` for vars/functions, and clear verb-based method names.
 - Keep Metal function/type names explicit and consistent between `ShaderTypes.h` and `Shaders.metal`.
-- Keep files focused: rendering logic in `Renderer.swift`, app lifecycle in `AppDelegate.swift`.
+- Keep files focused: each file should contain only one `class`, `struct`, `protocol`, `enum`, and etc...
 
 ## Testing Guidelines
 - Add unit tests in `WanderTests/` for math, state, and deterministic logic.
@@ -37,6 +38,7 @@ Use Xcode Product actions for day-to-day iteration; use `xcodebuild` in CI or re
 ## Commit & Pull Request Guidelines
 - Prefer Conventional Commit style seen in history (`feat: ...`, `fix: ...`, `chore: ...`).
 - Keep commits focused and atomic; avoid mixing refactors with behavior changes.
+- Keep commits small, one file at max.
 - PRs should include a clear summary of what changed and why.
 - PRs should link the related issue/spec (reference `Wander-spec.md` when relevant).
 - PRs should include screenshots or short recordings for rendering/UI changes.
