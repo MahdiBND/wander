@@ -41,3 +41,16 @@ Use Xcode Product actions for day-to-day iteration; use `xcodebuild` in CI or re
 - PRs should link the related issue/spec (reference `Wander-spec.md` when relevant).
 - PRs should include screenshots or short recordings for rendering/UI changes.
 - PRs should include test evidence (command run and result).
+
+## Branching Workflow (Required)
+- `main` is protected for stable history; do not develop features directly on `main`.
+- Create one branch per task using `task/<short-scope>` naming.
+- Examples: `task/scene-graph-core`, `task/chunk-streaming-pipeline`, `task/fog-atmosphere`.
+- Open a PR from the task branch into `main` for every task, even small ones.
+- Keep PR scope aligned to a single step from `dev-flow.md`.
+
+## Dev Flow Tracking (Required)
+- `dev-flow.md` is the source of truth for implementation progress.
+- When a step is completed and merged, immediately update its checkbox to `[x]`.
+- Do not mark a step done unless code is implemented and test checks pass.
+- If scope changes, update the step text in `dev-flow.md` in the same PR.
